@@ -31,7 +31,8 @@ class MotionPay {
 
     public static function makeSign($postfields, $appId, $appSecret) {
         $string = self::makeSignParams($postfields, $appId, $appSecret);
-        $string = sha1(utf8_encode($string));
+        $string = sha1(($string),TRUE);
+        $string = bin2hex($string);
         $result = strtoupper($string);
         return $result;
     }

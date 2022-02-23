@@ -74,10 +74,7 @@ logTransaction('MotionPay - Alipay', $json, "Successful Paid: " . $amount);
 
 
 // return MotionPay
-header('Content-type: application/json');
-$resObj->code = '0';
-$resObj->message = 'success';
-$resJSON = json_encode($resObj);
-echo $resJSON;
+$result = array('code' => '0', 'message' => 'success');
+echo json_encode($result);
 
 ?>
