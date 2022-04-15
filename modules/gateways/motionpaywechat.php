@@ -55,6 +55,14 @@ function motionpaywechat_config()
             'Default' => '',
             'Description' => 'Enter your MotionPay App Secret here',
         ),
+        // a text field type allows for single line text input
+        'serverIP' => array(
+            'FriendlyName' => 'Server IP',
+            'Type' => 'text',
+            'Size' => '25',
+            'Default' => '',
+            'Description' => 'IP for Merchant Server (IP is the mandatory input for Wechat payment)',
+        ),
     );
 }
 
@@ -65,6 +73,7 @@ function motionpaywechat_link($params)
     $mId = $params['mId'];
     $appId = $params['appId'];
     $appSecret = $params['appSecret'];
+    $serverIP = $params['serverIP'];
 
     // Invoice Parameters
     $invoiceId = $params['invoiceid'];
@@ -79,10 +88,11 @@ function motionpaywechat_link($params)
 
     $postfields = array (
         'mid' => $mId,
-        'pay_channel' => 'A',
+        'pay_channel' => 'W',
         'terminal_no' => 'WebServer',
         'goods_info' => 'VMISS-Purchase',
         'out_trade_no' => $invoiceId . MotionPay::getInvoiceStr(),
+        'spbill_create_ip' => $serverIP,
         'total_fee' => round($amount * 100, 2),
         'currency_type' => $currencyCode,
         'return_url' => $systemUrl . 'modules/gateways/callback/motionpaywechat.php',
