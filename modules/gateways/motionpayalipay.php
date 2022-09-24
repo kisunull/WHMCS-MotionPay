@@ -130,3 +130,87 @@ function motionpayalipay_link($params)
         throw new MotionPayException("curl error，error code:$error");
     }
 }
+
+
+function motionpayalipay_refund($params)
+{
+    // Gateway Configuration Parameters
+    $mId = $params['mId'];
+    $appId = $params['appId'];
+    $appSecret = $params['appSecret'];
+
+    // Invoice Parameters
+    $out_trade_no = $params['transid'];
+    $amount = $params['amount'];
+
+
+    // System Parameters
+    $systemUrl = $params['systemurl'];
+
+    $url_base = 'https://online.motionpaytech.com/onlinePayment/v1_1/pay/revoke';
+
+    $postfields = array (
+        'mid' => $mId,
+        'out_trade_no' => $out_trade_no,
+        'total_fee' => round($amount * 100, 2),
+        'refund_amount' => round($amount * 100, 2),
+    );
+
+    // Create Sign
+    $sign = MotionPay::makeSign($postfields, $appId, $appSecret);
+
+    // Add $sign into $postfields
+    $postfields['sign'] = $sign;
+
+
+    $ch = curl_init();
+    // time out
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+
+    curl_setopt($ch, CURLOPT_URL, $url_base);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, TRUE);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+    // set header
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array('Accept: application/json', 'Content-Type: application/json'));
+    // POST
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postfields));
+
+    $data = curl_exec($ch);
+
+    // response
+    if ($data) {
+        curl_close($ch);
+        // string to json
+        $data = json_decode($data, true);
+
+        if ($data['code'] === '0') {
+            return array(
+                // 'success' if successful, otherwise 'declined', 'error' for failure
+                'status' => 'success',
+                // Data to be recorded in the gateway log - can be a string or array
+                'rawdata' => $data['content'],
+                // Unique Transaction ID for the refund transaction
+                'transid' => $data['content']['out_trade_no'],
+                // Optional fee amount for the fee value refunded
+                'fees' => 0,
+            );
+        } else {
+            return array(
+                // 'success' if successful, otherwise 'declined', 'error' for failure
+                'status' => 'error',
+                // Data to be recorded in the gateway log - can be a string or array
+                'rawdata' => $data['content'],
+                // Unique Transaction ID for the refund transaction
+                'transid' => $data['content']['out_trade_no'],
+                // Optional fee amount for the fee value refunded
+                'fees' => 0,
+            );
+        }
+    } else {
+        $error = curl_errno($ch);
+        curl_close($ch);
+        throw new MotionPayException("curl error，error code:$error");
+    }
+}
