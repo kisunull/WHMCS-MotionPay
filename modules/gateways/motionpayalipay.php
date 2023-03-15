@@ -55,6 +55,14 @@ function motionpayalipay_config()
             'Default' => '',
             'Description' => 'Enter your MotionPay App Secret here',
         ),
+        // a text field type allows for single line text input
+        'transFee' => array(
+            'FriendlyName' => 'TransactionFee',
+            'Type' => 'text',
+            'Size' => '25',
+            'Default' => '1',
+            'Description' => 'Enter your transaction fee here',
+        ),
     );
 }
 
@@ -81,7 +89,7 @@ function motionpayalipay_link($params)
         'mid' => $mId,
         'pay_channel' => 'A',
         'terminal_no' => 'WebServer',
-        'goods_info' => 'VMISS-Purchase',
+        'goods_info' => 'VMISS_INC',
         'out_trade_no' => $invoiceId . MotionPay::getInvoiceStr(),
         'total_fee' => round($amount * 100, 2),
         'currency_type' => $currencyCode,
@@ -138,6 +146,7 @@ function motionpayalipay_refund($params)
     $mId = $params['mId'];
     $appId = $params['appId'];
     $appSecret = $params['appSecret'];
+    $transFee = $params['transFee'];
 
     // Invoice Parameters
     $out_trade_no = $params['transid'];
@@ -153,7 +162,7 @@ function motionpayalipay_refund($params)
         'mid' => $mId,
         'out_trade_no' => $out_trade_no,
         'total_fee' => round($amount * 100, 2),
-        'refund_amount' => round($amount * 100, 2),
+        'refund_amount' => round($amount * 100 - $transFee * 100, 2),
     );
 
     // Create Sign
@@ -190,7 +199,7 @@ function motionpayalipay_refund($params)
                 // 'success' if successful, otherwise 'declined', 'error' for failure
                 'status' => 'success',
                 // Data to be recorded in the gateway log - can be a string or array
-                'rawdata' => $data['content'],
+                'rawdata' => $data,
                 // Unique Transaction ID for the refund transaction
                 'transid' => $data['content']['out_trade_no'],
                 // Optional fee amount for the fee value refunded
@@ -201,7 +210,7 @@ function motionpayalipay_refund($params)
                 // 'success' if successful, otherwise 'declined', 'error' for failure
                 'status' => 'error',
                 // Data to be recorded in the gateway log - can be a string or array
-                'rawdata' => $data['content'],
+                'rawdata' => $data,
                 // Unique Transaction ID for the refund transaction
                 'transid' => $data['content']['out_trade_no'],
                 // Optional fee amount for the fee value refunded
