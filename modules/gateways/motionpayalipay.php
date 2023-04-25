@@ -82,6 +82,7 @@ function motionpayalipay_link($params)
 
     // System Parameters
     $systemUrl = $params['systemurl'];
+    $langPayNow = $params['langpaynow'];
 
     $url_base = 'https://online.motionpaytech.com/onlinePayment/v1_1/pay/prePay';
 
@@ -102,41 +103,35 @@ function motionpayalipay_link($params)
     // Add $sign into $postfields
     $postfields['sign'] = $sign;
 
+    $paramsJson = json_encode($postfields);
 
-    $ch = curl_init();
-    // time out
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    $htmlOutput = <<<HTML
+        <input type="hidden" id="paramsJson" value='$paramsJson'>
+        <input id="payButton" type="button" value="{$langPayNow}" />
+        <div id="result"></div>
+        <script>
+        document.getElementById('payButton').addEventListener('click', function() {
+            this.disabled = true; // disable the button
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    var response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        document.getElementById('result').innerHTML = response.html;
+                    } else {
+                        document.getElementById('result').innerHTML = '<p class="error">' + response.message + '</p>';
+                    }
+                }
+            };
+            var paramsJson = document.getElementById('paramsJson').value;
+            xhr.open('POST', 'modules/gateways/motionpay/alipay.php', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.send('pay=true&params=' + encodeURIComponent(paramsJson));
+        });
+        </script>
+    HTML;
 
-    curl_setopt($ch, CURLOPT_URL, $url_base);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, TRUE);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-    // set header
-    curl_setopt($ch, CURLOPT_HTTPHEADER, array('Accept: application/json', 'Content-Type: application/json'));
-    // POST
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postfields));
-
-    $data = curl_exec($ch);
-
-    // response
-    if ($data) {
-        curl_close($ch);
-        // string to json
-        $data = json_decode($data, true);
-
-        if ($data['code'] === '0') {
-            $url_code = urlencode($data['content']['qrcode']);
-            $htmlOutput = '<img src="modules/gateways/motionpay/qrcode.php?data=' . $url_code .'" style="width:150px;height:150px;"/>';
-            return $htmlOutput;
-        } else {
-            return $data['message'];
-        }
-    } else {
-        $error = curl_errno($ch);
-        curl_close($ch);
-        throw new MotionPayException("curl error，error code:$error");
-    }
+    return $htmlOutput;
 }
 
 
