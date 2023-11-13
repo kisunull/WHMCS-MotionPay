@@ -147,6 +147,13 @@ function motionpayalipay_refund($params)
     $out_trade_no = $params['transid'];
     $amount = $params['amount'];
 
+    // Calculate the refund amount
+    // default refund amount is $amount - $transFee
+    $refundAmount = round($amount * 100 - $transFee * 100, 2);
+    // if $amount equals to the transFee, then refund the whole $amount
+    if ($amount == $transFee) {
+        $refundAmount = round($amount * 100, 2);
+    }
 
     // System Parameters
     $systemUrl = $params['systemurl'];
@@ -157,7 +164,7 @@ function motionpayalipay_refund($params)
         'mid' => $mId,
         'out_trade_no' => $out_trade_no,
         'total_fee' => round($amount * 100, 2),
-        'refund_amount' => round($amount * 100 - $transFee * 100, 2),
+        'refund_amount' => $refundAmount,
     );
 
     // Create Sign
