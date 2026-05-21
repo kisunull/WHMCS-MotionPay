@@ -90,7 +90,7 @@ function motionpayalipay_link($params)
         'mid' => $mId,
         'pay_channel' => 'A',
         'terminal_no' => 'WebServer',
-        'goods_info' => 'VMISS_INC',
+        'goods_info' => 'VMISS_' . $invoiceId,
         'out_trade_no' => $invoiceId . MotionPay::getInvoiceStr(),
         'total_fee' => round($amount * 100, 2),
         'currency_type' => $currencyCode,
