@@ -1,4 +1,9 @@
 <?php
+if (!defined("WHMCS")) {
+    die("This file cannot be accessed directly");
+}
+
+use WHMCS\Database\Capsule;
 
 class MotionPay {
     public static function getInvoiceStr($length = 12) {
@@ -10,7 +15,7 @@ class MotionPay {
         return $str;
     }
 
-    public function makeQueryParams($postfields) {
+    public static function makeQueryParams($postfields) {
         $buff = "";
         foreach ($postfields as $k => $v) {
             if ($v != "" && !is_array($v)) {
@@ -35,5 +40,38 @@ class MotionPay {
         $string = bin2hex($string);
         $result = strtoupper($string);
         return $result;
+    }
+
+    public static function isTransactionProcessed($transactionId) {
+        if (empty($transactionId)) {
+            return false;
+        }
+
+        return Capsule::table('tblaccounts')->where('transid', $transactionId)->exists();
+    }
+
+    public static function respondCallbackSuccess() {
+        header('Content-type: application/json');
+        echo json_encode(array('code' => '0', 'message' => 'success'));
+        exit;
+    }
+
+    public static function acquireDbLock($transactionId) {
+        $lockName = 'motionpay_' . md5($transactionId);
+
+        $result = Capsule::selectOne('SELECT GET_LOCK(?, ?) AS locked', [
+            $lockName,
+            5,
+        ]);
+
+        return ($result && intval($result->locked) === 1) ? $lockName : false;
+    }
+
+    public static function releaseDbLock($lockName) {
+        if ($lockName) {
+            Capsule::selectOne('SELECT RELEASE_LOCK(?) AS released', [
+                $lockName,
+            ]);
+        }
     }
 }

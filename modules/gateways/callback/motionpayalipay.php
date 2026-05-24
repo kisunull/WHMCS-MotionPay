@@ -60,21 +60,52 @@ if ($sign!==$_sign) die("Invalid Sign");
 // Trim string after "-" in the invoiceId: 10-wdgbsfw1uy76 => 10
 $invoiceId = substr($invoiceId, 0, strpos($invoiceId, '-'));
 
-// Checks invoice ID is a valid invoice number.
-checkCbInvoiceID($invoiceId, $gatewayModuleName);
+$lockName = MotionPay::acquireDbLock($transactionId);
+if ($lockName === false) {
+    if (MotionPay::isTransactionProcessed($transactionId)) {
+        logTransaction('MotionPay - Alipay', $json, 'Lock failed but transaction already processed: ' . $transactionId);
+        MotionPay::respondCallbackSuccess();
+    }
 
-// Performs a check for any existing transactions with the same given transaction number.
-checkCbTransID($transactionId);
-
-// to actual amount
-$amount = round($amount / 100, 2);
-
-addInvoicePayment($invoiceId, $transactionId, $amount, $fee, $gatewayModuleName);
-logTransaction('MotionPay - Alipay', $json, "Successful Paid: " . $amount);
+    logTransaction('MotionPay - Alipay', $json, 'Lock timeout and transaction not processed: ' . $transactionId);
+    die("Lock Failed");
+}
 
 
-// return MotionPay
-$result = array('code' => '0', 'message' => 'success');
-echo json_encode($result);
+try {
+    if (MotionPay::isTransactionProcessed($transactionId)) {
+        logTransaction('MotionPay - Alipay', $json, 'Duplicate callback ignored: ' . $transactionId);
+        MotionPay::releaseDbLock($lockName);
+        MotionPay::respondCallbackSuccess();
+    }
+
+    // Checks invoice ID is a valid invoice number.
+    checkCbInvoiceID($invoiceId, $gatewayModuleName);
+
+    // Performs a check for any existing transactions with the same given transaction number.
+    checkCbTransID($transactionId);
+
+    // to actual amount
+    $amount = round($amount / 100, 2);
+
+    addInvoicePayment($invoiceId, $transactionId, $amount, $fee, $gatewayModuleName);
+    logTransaction('MotionPay - Alipay', $json, "Successful Paid: " . $amount);
+
+    MotionPay::releaseDbLock($lockName);
+    MotionPay::respondCallbackSuccess();
+
+
+} catch (\Throwable $e) {
+    MotionPay::releaseDbLock($lockName);
+
+    logTransaction('MotionPay - Alipay', $json, 'Callback exception: ' . $e->getMessage());
+    die('Callback Error');
+}
+
+
+
+
+
+
 
 ?>
