@@ -60,24 +60,48 @@ if ($sign!==$_sign) die("Invalid Sign");
 // Trim string after "-" in the invoiceId: 10-wdgbsfw1uy76 => 10
 $invoiceId = substr($invoiceId, 0, strpos($invoiceId, '-'));
 
-// Checks invoice ID is a valid invoice number.
-checkCbInvoiceID($invoiceId, $gatewayModuleName);
+$lockName = MotionPay::acquireDbLock($transactionId);
+if ($lockName === false) {
+    if (MotionPay::isTransactionProcessed($transactionId)) {
+        logTransaction('MotionPay - Wechat', $json, 'Lock failed but transaction already processed: ' . $transactionId);
+        MotionPay::respondCallbackSuccess();
+    }
 
-// Performs a check for any existing transactions with the same given transaction number.
-checkCbTransID($transactionId);
-
-// to actual amount
-$amount = round($amount / 100, 2);
-
-addInvoicePayment($invoiceId, $transactionId, $amount, $fee, $gatewayModuleName);
-logTransaction('MotionPay - Wechat', $json, "Successful Paid: " . $amount);
+    logTransaction('MotionPay - Wechat', $json, 'Lock timeout and transaction not processed: ' . $transactionId);
+    die("Lock Failed");
+}
 
 
-// return MotionPay
-header('Content-type: application/json');
-$resObj->code = '0';
-$resObj->message = 'success';
-$resJSON = json_encode($resObj);
-echo $resJSON;
+try {
+    if (MotionPay::isTransactionProcessed($transactionId)) {
+        logTransaction('MotionPay - Wechat', $json, 'Duplicate callback ignored: ' . $transactionId);
+        MotionPay::releaseDbLock($lockName);
+        MotionPay::respondCallbackSuccess();
+    }
+
+    // Checks invoice ID is a valid invoice number.
+    checkCbInvoiceID($invoiceId, $gatewayModuleName);
+
+    // Performs a check for any existing transactions with the same given transaction number.
+    checkCbTransID($transactionId);
+
+    // to actual amount
+    $amount = round($amount / 100, 2);
+
+    addInvoicePayment($invoiceId, $transactionId, $amount, $fee, $gatewayModuleName);
+    logTransaction('MotionPay - Wechat', $json, "Successful Paid: " . $amount);
+
+    MotionPay::releaseDbLock($lockName);
+    MotionPay::respondCallbackSuccess();
+
+
+} catch (\Throwable $e) {
+    MotionPay::releaseDbLock($lockName);
+
+    logTransaction('MotionPay - Wechat', $json, 'Callback exception: ' . $e->getMessage());
+    die('Callback Error');
+}
+
+
 
 ?>
