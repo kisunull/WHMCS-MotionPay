@@ -1,0 +1,229 @@
+<?php
+/**
+ * MotionPay - Alipay
+ * Author: Keith
+ * Copyright (c) VMISS Inc. 2022
+ */
+
+if (!defined("WHMCS")) {
+    die("This file cannot be accessed directly");
+}
+
+require_once realpath(dirname(__FILE__)) . "/motionpay/common.php";
+
+function motionpayalipay_MetaData()
+{
+    return array(
+        'DisplayName' => 'MotionPay - Alipay',
+        'APIVersion' => '1.1',
+        'DisableLocalCreditCardInput' => true,
+        'TokenisedStorage' => false,
+    );
+}
+
+
+function motionpayalipay_config()
+{
+    return array(
+        // the friendly display name for a payment gateway should be
+        // defined here for backwards compatibility
+        'FriendlyName' => array(
+            'Type' => 'System',
+            'Value' => 'MotionPay - Alipay',
+        ),
+        // a text field type allows for single line text input
+        'mId' => array(
+            'FriendlyName' => 'mId',
+            'Type' => 'text',
+            'Size' => '25',
+            'Default' => '',
+            'Description' => 'Enter your MotionPay Merchant ID here',
+        ),
+        // a text field type allows for single line text input
+        'appId' => array(
+            'FriendlyName' => 'AppId',
+            'Type' => 'text',
+            'Size' => '25',
+            'Default' => '',
+            'Description' => 'Enter your MotionPay App Id here',
+        ),
+        // a password field type allows for masked text input
+        'appSecret' => array(
+            'FriendlyName' => 'AppSecret',
+            'Type' => 'password',
+            'Size' => '32',
+            'Default' => '',
+            'Description' => 'Enter your MotionPay App Secret here',
+        ),
+        // a text field type allows for single line text input
+        'transFee' => array(
+            'FriendlyName' => 'TransactionFee',
+            'Type' => 'text',
+            'Size' => '25',
+            'Default' => '1',
+            'Description' => 'Enter your transaction fee here',
+        ),
+    );
+}
+
+
+function motionpayalipay_link($params)
+{
+    // Gateway Configuration Parameters
+    $mId = $params['mId'];
+    $appId = $params['appId'];
+    $appSecret = $params['appSecret'];
+
+    // Invoice Parameters
+    $invoiceId = $params['invoiceid'];
+    $description = $params["description"];
+    $amount = $params['amount'];
+    $currencyCode = $params['currency'];
+
+    // System Parameters
+    $systemUrl = $params['systemurl'];
+    $langPayNow = $params['langpaynow'];
+
+    $url_base = 'https://online.motionpaytech.com/onlinePayment/v1_1/pay/prePay';
+
+    $postfields = array (
+        'mid' => $mId,
+        'pay_channel' => 'A',
+        'terminal_no' => 'WebServer',
+        'goods_info' => 'VMISS_' . $invoiceId,
+        'out_trade_no' => $invoiceId . MotionPay::getInvoiceStr(),
+        'total_fee' => round($amount * 100, 2),
+        'currency_type' => $currencyCode,
+        'return_url' => $systemUrl . 'modules/gateways/callback/motionpayalipay.php',
+    );
+
+    // Create Sign
+    $sign = MotionPay::makeSign($postfields, $appId, $appSecret);
+
+    // Add $sign into $postfields
+    $postfields['sign'] = $sign;
+
+    $paramsJson = htmlspecialchars(json_encode($postfields), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $langPayNow = htmlspecialchars($langPayNow, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    $htmlOutput = <<<HTML
+        <input type="hidden" id="paramsJson" value='$paramsJson'>
+        <input id="payButton" type="button" value="{$langPayNow}" />
+        <div id="result"></div>
+        <script>
+        document.getElementById('payButton').addEventListener('click', function() {
+            this.disabled = true; // disable the button
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    var response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        document.getElementById('result').innerHTML = response.html;
+                    } else {
+                        document.getElementById('result').innerHTML = '<p class="error">' + response.message + '</p>';
+                    }
+                }
+            };
+            var paramsJson = document.getElementById('paramsJson').value;
+            xhr.open('POST', 'modules/gateways/motionpay/alipay.php', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.send('pay=true&params=' + encodeURIComponent(paramsJson));
+        });
+        </script>
+    HTML;
+
+    return $htmlOutput;
+}
+
+
+function motionpayalipay_refund($params)
+{
+    // Gateway Configuration Parameters
+    $mId = $params['mId'];
+    $appId = $params['appId'];
+    $appSecret = $params['appSecret'];
+    $transFee = $params['transFee'];
+
+    // Invoice Parameters
+    $out_trade_no = $params['transid'];
+    $amount = $params['amount'];
+
+    // Calculate the refund amount
+    // default refund amount is $amount - $transFee
+    $refundAmount = round($amount * 100 - $transFee * 100, 2);
+    // if $amount equals to the transFee, then refund the whole $amount
+    if ($amount == $transFee) {
+        $refundAmount = round($amount * 100, 2);
+    }
+
+    // System Parameters
+    $systemUrl = $params['systemurl'];
+
+    $url_base = 'https://online.motionpaytech.com/onlinePayment/v1_1/pay/revoke';
+
+    $postfields = array (
+        'mid' => $mId,
+        'out_trade_no' => $out_trade_no,
+        'total_fee' => round($amount * 100, 2),
+        'refund_amount' => $refundAmount,
+    );
+
+    // Create Sign
+    $sign = MotionPay::makeSign($postfields, $appId, $appSecret);
+
+    // Add $sign into $postfields
+    $postfields['sign'] = $sign;
+
+
+    $ch = curl_init();
+    // time out
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+
+    curl_setopt($ch, CURLOPT_URL, $url_base);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, TRUE);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+    // set header
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array('Accept: application/json', 'Content-Type: application/json'));
+    // POST
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postfields));
+
+    $data = curl_exec($ch);
+
+    // response
+    if ($data) {
+        curl_close($ch);
+        // string to json
+        $data = json_decode($data, true);
+
+        if (is_array($data) && ($data['code'] ?? null) === '0'
+            && isset($data['content']['out_trade_no']) && is_string($data['content']['out_trade_no'])) {
+            return array(
+                // 'success' if successful, otherwise 'declined', 'error' for failure
+                'status' => 'success',
+                // Data to be recorded in the gateway log - can be a string or array
+                'rawdata' => $data,
+                // Unique Transaction ID for the refund transaction
+                'transid' => $data['content']['out_trade_no'],
+                // Optional fee amount for the fee value refunded
+                'fees' => 0,
+            );
+        } else {
+            return array(
+                // 'success' if successful, otherwise 'declined', 'error' for failure
+                'status' => 'error',
+                // Data to be recorded in the gateway log - can be a string or array
+                'rawdata' => $data,
+                // Unique Transaction ID for the refund transaction
+                'transid' => $data['content']['out_trade_no'] ?? $out_trade_no,
+                // Optional fee amount for the fee value refunded
+                'fees' => 0,
+            );
+        }
+    } else {
+        $error = curl_errno($ch);
+        curl_close($ch);
+        throw new MotionPayException("curl error，error code:$error");
+    }
+}
